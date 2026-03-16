@@ -1,0 +1,10 @@
+{
+  "repo": "qiuyusong/work-skill-tools",
+  "skills": [
+    {
+      "name": "ecp-timereport-autofill",
+      "path": "skills/ecp-timereport-autofill",
+      "description": "Fill ECP timereport entries from release branch commits."
+    }
+  ]
+}

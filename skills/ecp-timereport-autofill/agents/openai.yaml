@@ -1,0 +1,4 @@
+interface:
+  display_name: "ECP 工时自动填报"
+  short_description: "按 release 分支提交自动填报 ECP 工时"
+  default_prompt: "使用 $ecp-timereport-autofill 从当天 release 分支提交自动填报 ECP timereport。若首次使用，先运行 configure-ecp-timereport.cmd 配置 skill 内变量。"
