@@ -26,7 +26,10 @@ Required-status check before submit:
 python scripts/configure_timereport.py --show-required-status
 ```
 
-If any required field is missing, the agent should ask the user for only the missing values, write them with `configure_timereport.py`, rerun `--show-required-status`, and only then continue to `fill_timereport.py --submit`.
+If any required field is missing, the agent should ask the user for only the missing values, using natural-language prompts rather than raw config keys, write them with `configure_timereport.py`, rerun `--show-required-status`, and only then continue to `fill_timereport.py --submit`.
+If `binding_issue` is present in the required-status output, skip the recovery choice and go straight into the reconfigure flow.
+Only when there is no `binding_issue` should the agent ask whether to recover restorable config from the most recent successful timereport report or reconfigure from scratch. If the user chooses recovery, restore what can be inferred first, then ask only for the remaining missing values.
+When asking for missing values, first tell the user how many items are missing, list them in natural language, and then ask one item at a time with a short confirmation after each answer.
 
 After the first successful save, the config file stores a `device_binding` fingerprint for the current machine.
 
