@@ -20,6 +20,14 @@ python scripts/configure_timereport.py --interactive
 configure-ecp-timereport.cmd
 ```
 
+Required-status check before submit:
+
+```bash
+python scripts/configure_timereport.py --show-required-status
+```
+
+If any required field is missing, the agent should ask the user for only the missing values, write them with `configure_timereport.py`, rerun `--show-required-status`, and only then continue to `fill_timereport.py --submit`.
+
 After the first successful save, the config file stores a `device_binding` fingerprint for the current machine.
 
 You can update values by CLI:

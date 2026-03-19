@@ -11,7 +11,7 @@ from getpass import getpass
 from pathlib import Path
 from typing import Any
 
-from device_binding import with_device_binding
+from device_binding import missing_required_values, with_device_binding
 
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CONFIG_PATH = SKILL_ROOT / "config" / "timereport-config.json"
@@ -44,6 +44,7 @@ def parse_args() -> argparse.Namespace:
         help=f"Config path (default: {DEFAULT_CONFIG_PATH}).",
     )
     parser.add_argument("--show", action="store_true", help="Show config summary.")
+    parser.add_argument("--show-required-status", action="store_true", help="Show required config status as JSON.")
     parser.add_argument("--interactive", action="store_true", help="Interactive update mode.")
     parser.add_argument("--repo", action="append", default=[], help="Repo path, repeatable.")
     parser.add_argument("--repos", help="Repo paths separated by ';'.")
@@ -283,6 +284,20 @@ def compact_config(config: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
+def build_required_status(config: dict[str, Any]) -> dict[str, Any]:
+    missing_fields = missing_required_values(config)
+    projects = config.get("projects") if isinstance(config.get("projects"), list) else []
+    ecp = config.get("ecp") if isinstance(config.get("ecp"), dict) else {}
+    return {
+        "ready": not missing_fields,
+        "missing_fields": missing_fields,
+        "project_count": len(projects),
+        "has_username": bool(str(ecp.get("username", "")).strip()),
+        "has_password": bool(str(ecp.get("password", "")).strip()),
+        "config_path": None,
+    }
+
+
 def write_config(path: Path, config: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     stamped = with_device_binding(config)
@@ -318,6 +333,12 @@ def main() -> int:
     args = parse_args()
     config_path = Path(args.config).expanduser().resolve()
     config = load_config(config_path)
+
+    if args.show_required_status:
+        status = build_required_status(config)
+        status["config_path"] = str(config_path)
+        print(json.dumps(status, ensure_ascii=False, indent=2))
+        return 0
 
     changed = apply_cli_updates(config, args)
     if args.interactive or (not changed and not args.show):

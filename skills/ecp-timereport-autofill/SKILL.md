@@ -17,6 +17,28 @@ description: 从 release 分支的当日 Git 提交自动生成并可提交 ECP 
 3. 首次保存配置时，会自动记录当前设备指纹到 `device_binding`。
 4. 后续可重复运行快捷脚本随时更新。
 
+## 对话式补配置流程
+
+当用户说“填写今日工时”“提交今天工时”“补工时”等，需要按下面流程强制执行：
+
+1. 先运行 `python scripts/configure_timereport.py --show-required-status` 检查必填配置状态。
+2. 如果 `ready=true`，再继续执行填报脚本。
+3. 如果 `ready=false`，不要直接结束，也不要只让用户自己去运行脚本。
+4. 必须在当前对话里主动向用户索取缺失字段，只问 `missing_fields` 里缺的项：
+   - `projects`：让用户提供本地仓库路径，格式为 `name=path;name=path`
+   - `ecp.username`：让用户输入 ECP 账号
+   - `ecp.password`：让用户输入 ECP 密码
+5. 收到用户输入后，立即运行 `python scripts/configure_timereport.py` 把值写回 `config/timereport-config.json`。
+6. 写回后再次运行 `python scripts/configure_timereport.py --show-required-status`。
+7. 只有当 `ready=true` 时，才能继续执行 `python scripts/fill_timereport.py --submit ...`。
+
+对话约束：
+
+- 优先用当前对话补配置，不把责任推回给用户手动执行脚本。
+- 每次只问缺失项，不重复索取已有值。
+- 如果能从最近一次 timereport 报告或当前工作区推断出项目路径，可先复用，再只向用户问剩余缺项。
+- 写入配置后，在继续填报前要向用户简短说明“配置已补齐，继续提交工时”。
+
 ## 填报规则（已内置）
 
 1. 仅对中国大陆法定工作日（含调休）执行填报，节假日/休息日不填。
@@ -27,24 +49,25 @@ description: 从 release 分支的当日 Git 提交自动生成并可提交 ECP 
 6. `--activity-type 休假 --activity-detail 特休假` 会生成 `休假-特休假` 描述，且不关联任务。
 7. `--activity-type 会议 --activity-detail 顾问会议` 会生成 `会议-顾问会议` 描述，且保持任务关联。
 8. 工时明细进度百分比统一写入 `100%`（当月首个工作日及后续工作日均一致）。
-9. 触发 skill 时会先校验 `device_binding.fingerprint`；若缺失或与当前设备不一致，会自动清空配置文件中的业务变量，只保留当前设备指纹和空白必填项，然后要求用户通过对话补全 `projects`、`ecp.username`、`ecp.password`。
+9. 触发 skill 时会先校验 `device_binding.fingerprint`；若缺失或与当前设备不一致，会自动清空配置文件中的业务变量，只保留当前设备指纹和空白必填项，然后必须按“对话式补配置流程”向用户补全 `projects`、`ecp.username`、`ecp.password`。
 
 ## 工作流程
 
 1. 读取 `config/timereport-config.json` 中的本地项目映射与 ECP 参数。
 2. 登录 ECP 后先调用 `Ecp.Aile.getOnlineUser` 获取当前 `userId`。
 3. 再调用 `Ecp.TimeReport.getAllRelevantObjs` 自动匹配当月任务 `taskId`。
-4. 运行 `scripts/fill_timereport.py`，从 release 分支提取当天提交并生成工时内容。
-5. 检查 `timereport-reports/` 下生成的 JSON 报告。
-6. 使用 `--submit` 写入 ECP 工时日志。
+4. 若必填配置缺失，先按“对话式补配置流程”补齐配置，再继续。
+5. 运行 `scripts/fill_timereport.py`，从 release 分支提取当天提交并生成工时内容。
+6. 检查 `timereport-reports/` 下生成的 JSON 报告。
+7. 使用 `--submit` 写入 ECP 工时日志。
 
 ## 跨设备保护流程
 
 1. skill 首次配置成功后，会把当前设备指纹写入 `config/timereport-config.json` 的 `device_binding`。
 2. 每次运行 `scripts/fill_timereport.py` 前，都会校验该指纹。
 3. 若发现指纹缺失或与当前设备不一致，脚本会自动清空配置中的业务变量。
-4. 此时 skill 会停止执行，并要求通过对话补全 `projects`、`ecp.username`、`ecp.password`。
-5. 用户补全后重新运行 `python scripts/configure_timereport.py --interactive`，脚本会把新设备指纹重新写入配置。
+4. 此时不能直接终止，必须通过当前对话补全 `projects`、`ecp.username`、`ecp.password`。
+5. 收到用户输入后，运行 `python scripts/configure_timereport.py` 把新值写回配置，脚本会把新设备指纹重新写入配置。
 
 ## 命令示例
 
