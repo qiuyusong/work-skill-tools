@@ -72,6 +72,9 @@ If submission fails, report the error and keep the generated JSON report path fo
 Rules baked into the script:
 
 - Multiple commits on the same day only use the earliest commit summary.
+- If a workday has no direct commit, only nearby dates with multiple commits can be used as fallback.
+- Nearby fallback commits skip records already submitted in the current month and pick the next unused one.
+- If no nearby multi-commit record remains, the day stays unfilled until a later run unless it is month-end fuzzy fill.
 - Leave entries use `休假-xxx` and do not associate a task.
 - Meeting entries use `会议-xxx` and keep the current-month task association.
 - If `device_binding.fingerprint` is missing or mismatched, the script clears business config values and stops, so the caller can ask the user to refill `projects`, `ecp.username`, and `ecp.password`.

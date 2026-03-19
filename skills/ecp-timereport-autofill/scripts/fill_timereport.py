@@ -88,6 +88,12 @@ class SkillConfig:
     fuzzy_descriptions: list[str]
 
 
+@dataclass
+class SubmissionHistory:
+    used_hashes: set[str]
+    used_descriptions: set[str]
+
+
 ACTIVITY_TYPE_ALIASES = {
     "產品研發": "產品研發",
     "产品研发": "產品研發",
@@ -486,6 +492,70 @@ def extract_existing_descriptions(details: list[dict[str, Any]]) -> set[str]:
 
     walk(details)
     return descriptions
+
+
+def load_submission_history(output_dir: Path, target_date: dt.date) -> SubmissionHistory:
+    history = SubmissionHistory(used_hashes=set(), used_descriptions=set())
+    if not output_dir.exists():
+        return history
+
+    for report_path in sorted(output_dir.glob("*-ecp-timereport.json")):
+        try:
+            payload = json.loads(report_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(payload, dict):
+            continue
+        daily_reports = payload.get("daily_reports")
+        if not isinstance(daily_reports, list):
+            continue
+        for daily_report in daily_reports:
+            if not isinstance(daily_report, dict):
+                continue
+            date_text = clean_string(daily_report.get("date"))
+            if not date_text:
+                continue
+            try:
+                report_date = dt.date.fromisoformat(date_text)
+            except ValueError:
+                continue
+            if (report_date.year, report_date.month) != (target_date.year, target_date.month):
+                continue
+
+            submit_result = daily_report.get("submit_result")
+            if not isinstance(submit_result, dict) or submit_result.get("state") != "ok":
+                continue
+
+            entries = daily_report.get("entries")
+            if not isinstance(entries, list):
+                continue
+            for entry in entries:
+                if not isinstance(entry, dict):
+                    continue
+                description = clean_string(entry.get("work_description")) or clean_string(entry.get("description"))
+                if description:
+                    history.used_descriptions.add(description)
+                commits = entry.get("commits")
+                if not isinstance(commits, list):
+                    continue
+                for commit in commits:
+                    if not isinstance(commit, dict):
+                        continue
+                    short_hash = clean_string(commit.get("hash"))
+                    if short_hash:
+                        history.used_hashes.add(short_hash)
+                    summary = clean_string(commit.get("summary"))
+                    if summary:
+                        history.used_descriptions.add(summary)
+
+    return history
+
+
+def remember_entry_descriptions(existing_descriptions: set[str], entries: list[TimeEntry]) -> None:
+    for entry in entries:
+        description = clean_string(entry.work_description) or clean_string(entry.description)
+        if description:
+            existing_descriptions.add(description)
 
 
 def pick_nearby_commit(
@@ -906,7 +976,9 @@ def main(argv: list[str] | None = None) -> int:
     plans: list[DailyPlan] = []
     skipped_dates: list[dict[str, str]] = []
     submit_results: dict[str, dict[str, Any]] = {}
-    used_hashes: set[str] = set()
+    history = load_submission_history(Path(args.output_dir), run_date)
+    used_hashes: set[str] = set(history.used_hashes)
+    submitted_descriptions: set[str] = set(history.used_descriptions)
 
     if args.submit:
         ecp_username = require_value(args.ecp_username, "ECP username", config_path)
@@ -925,14 +997,26 @@ def main(argv: list[str] | None = None) -> int:
         if activity_type not in activity_types:
             raise SystemExit(f"Activity type '{activity_type}' not found. Valid values: {activity_types}")
 
+        month_start = today.replace(day=1)
+        daily_details_cache: dict[dt.date, list[dict[str, Any]]] = {}
+
+        def get_daily_details(date_value: dt.date) -> list[dict[str, Any]]:
+            if date_value not in daily_details_cache:
+                daily_details_cache[date_value] = client.get_daily_details(date_value)
+            return daily_details_cache[date_value]
+
+        for date_value in iterate_dates(month_start, today):
+            if not is_cn_workday(date_value):
+                continue
+            submitted_descriptions.update(extract_existing_descriptions(get_daily_details(date_value)))
+
         manual_activity_mode = bool(args.activity_detail)
 
         if run_date == today and not manual_activity_mode:
-            month_start = today.replace(day=1)
             for date_value in iterate_dates(month_start, today):
                 if not is_cn_workday(date_value):
                     continue
-                details = client.get_daily_details(date_value)
+                details = get_daily_details(date_value)
                 if details and not args.allow_overwrite:
                     continue
                 plan, reason = plan_entries_for_day(
@@ -940,7 +1024,7 @@ def main(argv: list[str] | None = None) -> int:
                     repos=repos,
                     args=args,
                     collect_day_commits=collect_day_commits,
-                    existing_descriptions=extract_existing_descriptions(details),
+                    existing_descriptions=submitted_descriptions,
                     used_hashes=used_hashes,
                     fuzzy_descriptions=fuzzy_descriptions,
                     month_end_run=month_end_run,
@@ -948,12 +1032,13 @@ def main(argv: list[str] | None = None) -> int:
                 )
                 if plan:
                     plans.append(plan)
+                    remember_entry_descriptions(submitted_descriptions, plan.entries)
                 else:
                     skipped_dates.append({"date": date_value.isoformat(), "reason": reason or "Skipped"})
         else:
             if not is_cn_workday(run_date):
                 raise SystemExit(f"Date {run_date.isoformat()} is not a China workday.")
-            details = client.get_daily_details(run_date)
+            details = get_daily_details(run_date)
             if details and not args.allow_overwrite:
                 raise SystemExit(
                     f"Date {run_date.isoformat()} already has {len(details)} detail row(s). Use --allow-overwrite to continue."
@@ -963,7 +1048,7 @@ def main(argv: list[str] | None = None) -> int:
                 repos=repos,
                 args=args,
                 collect_day_commits=collect_day_commits,
-                existing_descriptions=extract_existing_descriptions(details),
+                existing_descriptions=submitted_descriptions,
                 used_hashes=used_hashes,
                 fuzzy_descriptions=fuzzy_descriptions,
                 month_end_run=month_end_run,
@@ -972,6 +1057,7 @@ def main(argv: list[str] | None = None) -> int:
             if not plan:
                 raise SystemExit(reason or "No fillable content found for target date.")
             plans.append(plan)
+            remember_entry_descriptions(submitted_descriptions, plan.entries)
 
         task_id: str | None = None
         task_text: str | None = None
