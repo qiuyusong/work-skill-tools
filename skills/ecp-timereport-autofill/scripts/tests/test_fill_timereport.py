@@ -102,6 +102,51 @@ class FillTimereportTests(unittest.TestCase):
         self.assertEqual(commit.short_hash, "fresh456")
         self.assertEqual(source_date, nearby_date)
 
+    def test_extract_existing_total_hours_prefers_detail_row_hours(self) -> None:
+        details = [
+            {
+                "workHours": "8",
+                "nested": [
+                    {"workHours": "3"},
+                ],
+            },
+            {
+                "workTime": "2",
+            },
+            {
+                "actualWorktime": "1.5",
+            },
+            {
+                "children": [
+                    {"workHours": "0.5"},
+                    {"workTime": "0.5"},
+                ]
+            },
+        ]
+
+        total = fill_timereport.extract_existing_total_hours(details)
+
+        self.assertEqual(total, 12.5)
+
+    def test_calculate_main_entity_hours_appends_manual_overtime(self) -> None:
+        entry = fill_timereport.build_manual_entry(
+            target_date=dt.date(2026, 3, 19),
+            hours=2.0,
+            activity_type="會議",
+            activity_detail="顾问会议",
+        )
+        existing_details = [
+            {"workHours": "8.0"},
+        ]
+
+        total = fill_timereport.calculate_main_entity_hours(
+            entries=[entry],
+            existing_details=existing_details,
+            append_mode=True,
+        )
+
+        self.assertEqual(total, 10.0)
+
 
 if __name__ == "__main__":
     unittest.main()

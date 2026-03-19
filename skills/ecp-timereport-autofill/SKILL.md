@@ -84,7 +84,9 @@ description: 从 release 分支的当日 Git 提交自动生成并可提交 ECP 
 6. `--activity-type 休假 --activity-detail 特休假` 会生成 `休假-特休假` 描述，且不关联任务。
 7. `--activity-type 会议 --activity-detail 顾问会议` 会生成 `会议-顾问会议` 描述，且保持任务关联。
 8. 工时明细进度百分比统一写入 `100%`（当月首个工作日及后续工作日均一致）。
-9. 触发 skill 时会先校验 `device_binding.fingerprint`；若缺失或与当前设备不一致，会自动清空配置文件中的业务变量，只保留当前设备指纹和空白必填项，然后必须按“对话式补配置流程”直接进入“重新配置”分支，不再先询问“从最近报告恢复”还是“重新配置”。
+9. 用户提到“加班”“今晚加班 2 小时”“额外追加工时”等场景时，一律按“在当天已有工时基础上追加明细”处理，不得把这次加班小时数当成当天新的总工时去覆盖原主记录。
+10. 对已有工时的日期，如果使用 `--activity-detail` 手动补录会议/休假等明细，脚本会自动把主记录总工时更新为“已有工时 + 本次新增工时”，前提是显式使用 `--allow-overwrite` 允许在已有明细的日期继续写入。
+11. 触发 skill 时会先校验 `device_binding.fingerprint`；若缺失或与当前设备不一致，会自动清空配置文件中的业务变量，只保留当前设备指纹和空白必填项，然后必须按“对话式补配置流程”直接进入“重新配置”分支，不再先询问“从最近报告恢复”还是“重新配置”。
 
 ## 工作流程
 
@@ -120,6 +122,9 @@ python scripts/fill_timereport.py --date 2026-03-13 --activity-type 休假 --act
 # 指定会议（关联任务）
 python scripts/fill_timereport.py --date 2026-03-16 --activity-type 会议 --activity-detail 顾问会议 --submit
 
+# 在当天已有工时基础上追加 2 小时顾问会议
+python scripts/fill_timereport.py --date 2026-03-19 --hours 2 --activity-type 会议 --activity-detail 顾问会议 --allow-overwrite --submit
+
 # 提交到 ECP（默认 8 小时）
 python scripts/fill_timereport.py --submit
 
@@ -138,7 +143,7 @@ python scripts/configure_timereport.py --projects "project-a=/path/to/project-a;
 ## 失败处理
 
 - 指定日期无提交时，会尝试“临近多提交”或“月末模糊补齐”策略。
-- 当天已有工时明细时，默认终止；加 `--allow-overwrite` 才继续。
+- 当天已有工时明细时，默认终止；加 `--allow-overwrite` 才继续。若同时指定了 `--activity-detail` 手动补录，脚本会把这次工时视为追加，不会把当天主记录总工时覆盖成新增小时数。
 - ECP 接口报错时保留 JSON 报告并返回非 0 退出码。
 
 ## 参考

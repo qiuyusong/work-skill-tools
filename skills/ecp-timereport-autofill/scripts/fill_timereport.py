@@ -494,6 +494,70 @@ def extract_existing_descriptions(details: list[dict[str, Any]]) -> set[str]:
     return descriptions
 
 
+def parse_hours_value(value: Any) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        try:
+            return float(text)
+        except ValueError:
+            return None
+    return None
+
+
+def extract_detail_hours(detail: Any) -> float | None:
+    if isinstance(detail, dict):
+        for key in ("workHours", "workTime", "actualWorktime"):
+            hours = parse_hours_value(detail.get(key))
+            if hours is not None:
+                return hours
+        nested_total = 0.0
+        found_nested = False
+        for value in detail.values():
+            hours = extract_detail_hours(value)
+            if hours is None:
+                continue
+            nested_total += hours
+            found_nested = True
+        if found_nested:
+            return nested_total
+        return None
+    if isinstance(detail, list):
+        nested_total = 0.0
+        found_nested = False
+        for item in detail:
+            hours = extract_detail_hours(item)
+            if hours is None:
+                continue
+            nested_total += hours
+            found_nested = True
+        if found_nested:
+            return nested_total
+    return None
+
+
+def extract_existing_total_hours(details: list[dict[str, Any]]) -> float:
+    total = 0.0
+    for detail in details:
+        hours = extract_detail_hours(detail)
+        if hours is None:
+            continue
+        total += hours
+    return round(total, 1)
+
+
+def calculate_main_entity_hours(entries: list[TimeEntry], existing_details: list[dict[str, Any]], append_mode: bool) -> float:
+    total = round(sum(entry.hours for entry in entries), 1)
+    if append_mode and existing_details:
+        total += extract_existing_total_hours(existing_details)
+    return round(total, 1)
+
+
 def load_submission_history(output_dir: Path, target_date: dt.date) -> SubmissionHistory:
     history = SubmissionHistory(used_hashes=set(), used_descriptions=set())
     if not output_dir.exists():
@@ -1068,9 +1132,14 @@ def main(argv: list[str] | None = None) -> int:
             task_id, task_text = select_month_task(task_items, run_date)
 
         for plan in plans:
+            plan_details = get_daily_details(plan.date_value)
             entity_id = client.upsert_main_entity(
                 employee_id=employee["userId"],
-                total_hours=args.hours,
+                total_hours=calculate_main_entity_hours(
+                    entries=plan.entries,
+                    existing_details=plan_details,
+                    append_mode=manual_activity_mode,
+                ),
                 total_value=0.0,
                 date_value=plan.date_value,
             )

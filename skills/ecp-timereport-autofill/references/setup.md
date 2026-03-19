@@ -54,6 +54,9 @@ python scripts/fill_timereport.py --date 2026-03-13 --activity-type 休假 --act
 
 # Meeting entry: keep task association
 python scripts/fill_timereport.py --date 2026-03-16 --activity-type 会议 --activity-detail 顾问会议 --submit
+
+# Overtime append: add 2 extra hours on top of the existing day
+python scripts/fill_timereport.py --date 2026-03-19 --hours 2 --activity-type 会议 --activity-detail 顾问会议 --allow-overwrite --submit
 ```
 
 Task ID is auto-resolved during submit:
@@ -88,6 +91,7 @@ Rules baked into the script:
 - If no nearby multi-commit record remains, the day stays unfilled until a later run unless it is month-end fuzzy fill.
 - Leave entries use `休假-xxx` and do not associate a task.
 - Meeting entries use `会议-xxx` and keep the current-month task association.
+- When a date already has timereport details and you manually add `--activity-detail`, the script treats those hours as appended extra hours and updates the main entity total to `existing + new`, instead of overwriting the day's total with only the new hours.
 - If `device_binding.fingerprint` is missing or mismatched, the script clears business config values and stops, so the caller can ask the user to refill `projects`, `ecp.username`, and `ecp.password`.
 
 ## 4) Legacy Env Vars (Optional Fallback)
