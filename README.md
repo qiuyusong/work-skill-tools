@@ -6,40 +6,40 @@ Codex skills published for reuse.
 
 - `skills/<skill-name>`: individual installable skill folders
 - `skills/manifest.json`: registry used for one-command installs
-- `scripts/install_repo_skills.py`: install one or all skills from this repo
+- `scripts/install_repo_skills.py`: thin wrapper around `npx skills add`
 
 ## Install one skill
 
-Use Codex's built-in GitHub installer directly:
+Use the `skills` CLI directly:
 
 ```bash
-python ~/.codex/skills/.system/skill-installer/scripts/install-skill-from-github.py \
-  --repo qiuyusong/work-skill-tools \
-  --path skills/ecp-timereport-autofill
+npx skills add qiuyusong/work-skill-tools --skill ecp-timereport-autofill
 ```
 
 Windows PowerShell:
 
 ```powershell
-python $HOME\.codex\skills\.system\skill-installer\scripts\install-skill-from-github.py `
-  --repo qiuyusong/work-skill-tools `
-  --path skills/ecp-timereport-autofill
+npx skills add qiuyusong/work-skill-tools --skill ecp-timereport-autofill
 ```
 
 ## Install all skills
 
-Download and run the repo installer:
+Use the `skills` CLI:
 
 ```powershell
-Invoke-WebRequest https://raw.githubusercontent.com/qiuyusong/work-skill-tools/main/scripts/install_repo_skills.py -OutFile $env:TEMP\install_repo_skills.py
-python $env:TEMP\install_repo_skills.py --all
+npx skills add qiuyusong/work-skill-tools --all
 ```
 
-Install just one skill through the repo installer:
+Install just one skill:
 
 ```powershell
-Invoke-WebRequest https://raw.githubusercontent.com/qiuyusong/work-skill-tools/main/scripts/install_repo_skills.py -OutFile $env:TEMP\install_repo_skills.py
-python $env:TEMP\install_repo_skills.py --skill ecp-timereport-autofill
+npx skills add qiuyusong/work-skill-tools --skill ecp-timereport-autofill
+```
+
+For a non-interactive global install to Codex only:
+
+```powershell
+npx skills add qiuyusong/work-skill-tools --skill ecp-timereport-autofill --agent codex -g -y
 ```
 
 ## Publish more skills later
@@ -48,4 +48,4 @@ python $env:TEMP\install_repo_skills.py --skill ecp-timereport-autofill
 2. Register it in `skills/manifest.json`.
 3. Push to GitHub.
 
-`install_repo_skills.py --all` will then include the new skill automatically.
+`npx skills add qiuyusong/work-skill-tools --all` will then include the new skill automatically.
