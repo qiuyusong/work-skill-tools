@@ -91,8 +91,18 @@ Rules baked into the script:
 - If no nearby multi-commit record remains, the day stays unfilled until a later run unless it is month-end fuzzy fill.
 - Leave entries use `休假-xxx` and do not associate a task.
 - Meeting entries use `会议-xxx` and keep the current-month task association.
-- When a date already has timereport details and you manually add `--activity-detail`, the script treats those hours as appended extra hours and updates the main entity total to `existing + new`, instead of overwriting the day's total with only the new hours.
+- When a date already has timereport details and you manually add `--activity-detail`, non-leave activities are treated as appended extra hours and the main entity total becomes `existing + new`.
+- Leave activities do not increase the day total. They deduct hours from existing task-backed details inside the same `8H` day, for example `8H 产品研发 + 1H 特休` must be corrected to `7H 产品研发 + 1H 特休`.
+- Leave deductions must read current rows from `Ecp.TimeReport.getAllDetailDatas.data`, then update existing detail rows by calling `Ecp.TimeReport.addDetails.data` with `allDetails[].trpDetail = FId`. If a task-backed detail is reduced to `0H`, delete that detail row instead of keeping a zero-hour row.
 - If `device_binding.fingerprint` is missing or mismatched, the script clears business config values and stops, so the caller can ask the user to refill `projects`, `ecp.username`, and `ecp.password`.
+
+Existing-detail update flow:
+
+1. Call `Ecp.TimeReport.getAllDetailDatas.data` with `{"dateTime":"YYYY-MM-DD"}`.
+2. Find the existing task-backed detail rows and the target `FId`.
+3. Call `Ecp.TimeReport.addDetails.data` with the day `entityId`, and pass the existing row id in `allDetails[].trpDetail`.
+4. Only update the deducted row hours; keep the leave row as a separate detail.
+5. If a deducted row reaches `0H`, delete that row and then save the remaining details.
 
 ## 4) Legacy Env Vars (Optional Fallback)
 
