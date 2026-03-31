@@ -565,6 +565,68 @@ def calculate_main_entity_hours(
     return round(total, 1)
 
 
+def build_existing_detail_update(
+    detail: dict[str, Any],
+    new_hours: float,
+    employee_id: str,
+    date_value: dt.date,
+) -> dict[str, Any]:
+    detail_id = require_value(clean_string(detail.get("FId")), "ECP detail id", DEFAULT_CONFIG_PATH)
+    task_id = clean_string(detail.get("FTaskId")) or ""
+    activity_type = normalize_activity_type(detail.get("FType"))
+    work_desc = require_value(clean_string(detail.get("FWorkDescription")), "ECP detail description", DEFAULT_CONFIG_PATH)
+    progress = parse_hours_value(detail.get("FProgress"))
+    output_value = parse_hours_value(detail.get("FOutPutValue"))
+    fname = clean_string(detail.get("FName")) or build_fname(clean_string(detail.get("FTaskName")) if task_id else None, activity_type, work_desc)
+    return {
+        "trpDetail": detail_id,
+        "taskId": task_id,
+        "type": activity_type,
+        "workHours": f"{new_hours:.1f}",
+        "progress": f"{int(progress)}" if progress is not None else "100",
+        "outputValue": f"{(output_value or 0.0):.2f}",
+        "description": work_desc,
+        "fname": fname,
+        "userId": employee_id,
+        "date": date_to_iso_z(date_value),
+    }
+
+
+def plan_leave_deduction_mutations(
+    existing_details: list[dict[str, Any]],
+    leave_hours: float,
+    employee_id: str,
+    date_value: dt.date,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    remaining = round(leave_hours, 1)
+    updates: list[dict[str, Any]] = []
+    deletions: list[dict[str, Any]] = []
+    for detail in existing_details:
+        task_id = clean_string(detail.get("FTaskId"))
+        if not task_id:
+            continue
+        detail_hours = parse_hours_value(detail.get("FWorkTime"))
+        if detail_hours is None or detail_hours <= 0:
+            continue
+        deduction = min(detail_hours, remaining)
+        if deduction <= 0:
+            continue
+        new_hours = round(detail_hours - deduction, 1)
+        if new_hours > 0:
+            updates.append(build_existing_detail_update(detail, new_hours, employee_id, date_value))
+        else:
+            deletions.append(detail)
+        remaining = round(remaining - deduction, 1)
+        if remaining <= 0:
+            break
+    if remaining > 0:
+        raise SystemExit(
+            f"Leave hours exceed existing task-backed hours on {date_value.isoformat()}. "
+            "Please adjust the day manually."
+        )
+    return updates, deletions
+
+
 def load_submission_history(output_dir: Path, target_date: dt.date) -> SubmissionHistory:
     history = SubmissionHistory(used_hashes=set(), used_descriptions=set())
     if not output_dir.exists():
@@ -878,6 +940,29 @@ class EcpClient:
         result = self._post("Ecp.TimeReport.getAllDetailDatas", {"dateTime": date_value.isoformat()})
         return result.get("datas") or []
 
+    def update_existing_details(self, entity_id: str, detail_updates: list[dict[str, Any]]) -> dict[str, Any]:
+        if not detail_updates:
+            return {"state": "ok"}
+        result = self._post("Ecp.TimeReport.addDetails", {"entityId": entity_id, "jsonData": [], "allDetails": detail_updates})
+        if result.get("state") != "ok":
+            raise SystemExit(f"ECP addDetails update failed: {result}")
+        return result
+
+    def delete_detail_rows(self, employee_id: str, date_value: dt.date, details: list[dict[str, Any]]) -> None:
+        if not details:
+            return
+        task_ids = sorted({task_id for task_id in (clean_string(detail.get("FTaskId")) for detail in details) if task_id})
+        if task_ids:
+            self._post(
+                "Ecp.TimeReport.doBackProgressWhereDeleteDetail",
+                {"userId": employee_id, "date": date_value.isoformat(), "taskIds": task_ids, "needBack": 1},
+            )
+        for detail in details:
+            detail_id = require_value(clean_string(detail.get("FId")), "ECP detail id", DEFAULT_CONFIG_PATH)
+            result = self._post("Ecp.TimeReport.doDeleteForMecp", {"trpDetailId": detail_id})
+            if not result.get("isSuccess"):
+                raise SystemExit(f"ECP delete detail failed: {result}")
+
     def upsert_main_entity(self, employee_id: str, total_hours: float, total_value: float, date_value: dt.date) -> str:
         date_iso = date_to_iso_z(date_value)
         check_payload = {"userId": employee_id, "date": date_iso, "getLastRecordByuser": 1, "couldSave": 0}
@@ -1141,6 +1226,16 @@ def main(argv: list[str] | None = None) -> int:
         for plan in plans:
             plan_details = get_daily_details(plan.date_value)
             leave_only_plan = all(normalize_activity_type(entry.activity_type) == "休假" for entry in plan.entries)
+            leave_updates: list[dict[str, Any]] = []
+            leave_deletions: list[dict[str, Any]] = []
+            if manual_activity_mode and leave_only_plan:
+                leave_hours = round(sum(entry.hours for entry in plan.entries), 1)
+                leave_updates, leave_deletions = plan_leave_deduction_mutations(
+                    existing_details=plan_details,
+                    leave_hours=leave_hours,
+                    employee_id=employee["userId"],
+                    date_value=plan.date_value,
+                )
             entity_id = client.upsert_main_entity(
                 employee_id=employee["userId"],
                 total_hours=calculate_main_entity_hours(
@@ -1162,6 +1257,14 @@ def main(argv: list[str] | None = None) -> int:
                 entries=plan.entries,
                 project_name=clean_string(args.project_name),
             )
+            if leave_deletions:
+                client.delete_detail_rows(
+                    employee_id=employee["userId"],
+                    date_value=plan.date_value,
+                    details=leave_deletions,
+                )
+            if leave_updates:
+                client.update_existing_details(entity_id=entity_id, detail_updates=leave_updates)
 
         report_path = write_report(
             output_dir=Path(args.output_dir),

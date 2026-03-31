@@ -147,6 +147,98 @@ class FillTimereportTests(unittest.TestCase):
 
         self.assertEqual(total, 10.0)
 
+    def test_plan_leave_deduction_mutations_updates_existing_work_row(self) -> None:
+        updates, deletions = fill_timereport.plan_leave_deduction_mutations(
+            existing_details=[
+                {
+                    "FId": "detail-1",
+                    "FWorkTime": 8,
+                    "FType": "產品研發",
+                    "FWorkDescription": "处理消息渠道",
+                    "FProgress": 100,
+                    "FOutPutValue": ".0",
+                    "FName": "【宋秋雨】3月开发任务:產品研發:处理消息渠道",
+                    "FTaskName": "【宋秋雨】3月开发任务",
+                    "FTaskId": "task-1",
+                },
+                {
+                    "FId": "leave-1",
+                    "FWorkTime": 1,
+                    "FType": "休假",
+                    "FWorkDescription": "休假-特休假",
+                },
+            ],
+            leave_hours=1.0,
+            employee_id="user-1",
+            date_value=dt.date(2026, 3, 27),
+        )
+
+        self.assertEqual(deletions, [])
+        self.assertEqual(updates, [{
+            "trpDetail": "detail-1",
+            "taskId": "task-1",
+            "type": "產品研發",
+            "workHours": "7.0",
+            "progress": "100",
+            "outputValue": "0.00",
+            "description": "处理消息渠道",
+            "fname": "【宋秋雨】3月开发任务:產品研發:处理消息渠道",
+            "userId": "user-1",
+            "date": "2026-03-27T00:00:00.000Z",
+        }])
+
+    def test_plan_leave_deduction_mutations_deletes_fully_consumed_rows(self) -> None:
+        updates, deletions = fill_timereport.plan_leave_deduction_mutations(
+            existing_details=[
+                {
+                    "FId": "detail-1",
+                    "FWorkTime": 2,
+                    "FType": "產品研發",
+                    "FWorkDescription": "任务A",
+                    "FProgress": 100,
+                    "FOutPutValue": ".0",
+                    "FName": "任務A",
+                    "FTaskId": "task-a",
+                },
+                {
+                    "FId": "detail-2",
+                    "FWorkTime": 6,
+                    "FType": "產品研發",
+                    "FWorkDescription": "任务B",
+                    "FProgress": 100,
+                    "FOutPutValue": ".0",
+                    "FName": "任務B",
+                    "FTaskId": "task-b",
+                },
+            ],
+            leave_hours=3.0,
+            employee_id="user-1",
+            date_value=dt.date(2026, 3, 30),
+        )
+
+        self.assertEqual(deletions, [{
+            "FId": "detail-1",
+            "FWorkTime": 2,
+            "FType": "產品研發",
+            "FWorkDescription": "任务A",
+            "FProgress": 100,
+            "FOutPutValue": ".0",
+            "FName": "任務A",
+            "FTaskId": "task-a",
+        }])
+        self.assertEqual(updates, [{
+            "trpDetail": "detail-2",
+            "taskId": "task-b",
+            "type": "產品研發",
+            "workHours": "5.0",
+            "progress": "100",
+            "outputValue": "0.00",
+            "description": "任务B",
+            "fname": "任務B",
+            "userId": "user-1",
+            "date": "2026-03-30T00:00:00.000Z",
+        }])
+
 
 if __name__ == "__main__":
     unittest.main()
