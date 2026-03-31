@@ -551,7 +551,14 @@ def extract_existing_total_hours(details: list[dict[str, Any]]) -> float:
     return round(total, 1)
 
 
-def calculate_main_entity_hours(entries: list[TimeEntry], existing_details: list[dict[str, Any]], append_mode: bool) -> float:
+def calculate_main_entity_hours(
+    entries: list[TimeEntry],
+    existing_details: list[dict[str, Any]],
+    append_mode: bool,
+    keep_existing_total: bool = False,
+) -> float:
+    if keep_existing_total and existing_details:
+        return extract_existing_total_hours(existing_details)
     total = round(sum(entry.hours for entry in entries), 1)
     if append_mode and existing_details:
         total += extract_existing_total_hours(existing_details)
@@ -1133,12 +1140,14 @@ def main(argv: list[str] | None = None) -> int:
 
         for plan in plans:
             plan_details = get_daily_details(plan.date_value)
+            leave_only_plan = all(normalize_activity_type(entry.activity_type) == "休假" for entry in plan.entries)
             entity_id = client.upsert_main_entity(
                 employee_id=employee["userId"],
                 total_hours=calculate_main_entity_hours(
                     entries=plan.entries,
                     existing_details=plan_details,
-                    append_mode=manual_activity_mode,
+                    append_mode=manual_activity_mode and not leave_only_plan,
+                    keep_existing_total=manual_activity_mode and leave_only_plan,
                 ),
                 total_value=0.0,
                 date_value=plan.date_value,
