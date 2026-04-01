@@ -38,7 +38,7 @@ You can update values by CLI:
 ```bash
 python scripts/configure_timereport.py \
   --projects "project-a=/path/to/project-a;project-b=/path/to/project-b" \
-  --ecp-url "https://econtact.ai3.cloud/ecp" \
+  --ecp-url "https://econtact.gemfor.com.tw/ecp" \
   --username "your-username" \
   --password "your-password" \
   --nearby-days 7 \

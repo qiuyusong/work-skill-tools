@@ -18,7 +18,7 @@ DEFAULT_CONFIG_PATH = SKILL_ROOT / "config" / "timereport-config.json"
 DEFAULT_CONFIG: dict[str, Any] = {
     "projects": [],
     "ecp": {
-        "base_url": "https://econtact.ai3.cloud/ecp",
+        "base_url": "https://econtact.gemfor.com.tw/ecp",
         "username": "",
         "password": "",
     },
