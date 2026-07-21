@@ -8,6 +8,13 @@ Codex skills published for reuse.
 - `skills/manifest.json`: registry used for one-command installs
 - `scripts/install_repo_skills.py`: thin wrapper around `npx skills add`
 
+## Available skills
+
+| Skill | Purpose |
+|---|---|
+| `aile-spec-first-development` | Analyze Aile requirements, wait for scoped confirmation, implement with tests, and update Chinese specifications. |
+| `ecp-timereport-autofill` | Fill ECP timereport entries from release branch commits. |
+
 ## Install one skill
 
 Use the `skills` CLI directly:

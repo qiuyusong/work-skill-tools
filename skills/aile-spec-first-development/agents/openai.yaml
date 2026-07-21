@@ -1,0 +1,4 @@
+interface:
+  display_name: "Aile 规格驱动开发"
+  short_description: "先分析项目代码与规格，确认后测试实现并回补中文需求规范文档"
+  default_prompt: "Use $aile-spec-first-development to analyze this Aile task, wait for scoped confirmation, implement with tests, and update the Chinese specification."

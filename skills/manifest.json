@@ -5,6 +5,11 @@
       "name": "ecp-timereport-autofill",
       "path": "skills/ecp-timereport-autofill",
       "description": "Fill ECP timereport entries from release branch commits."
+    },
+    {
+      "name": "aile-spec-first-development",
+      "path": "skills/aile-spec-first-development",
+      "description": "Run Aile development through scoped confirmation, tests, and Chinese specification updates."
     }
   ]
 }
